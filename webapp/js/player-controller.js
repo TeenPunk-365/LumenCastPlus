@@ -45,7 +45,7 @@ export class PlayerController {
       onTrack: (id) => this.#playTrack(id),
       onArtist: () => this.#setTab(TABS.SEARCH),
       onCategory: (name) => this.#selectCategory(name),
-      onFeaturedFeed: (url) => this.#addRssFeed(url, true),
+      onFeaturedFeed: (url) => this.#openFeaturedFeed(url),
     });
     this.view.bindTopbar({
       onNotify: () => this.#toggleTheme(),
@@ -98,18 +98,37 @@ export class PlayerController {
     }
   }
 
-  async #addRssFeed(url, persist) {
-    if (!url) { this.view.setRssStatus("Укажите URL RSS-ленты.", true); return; }
-    this.view.setRssStatus("Загружаю RSS-ленту...");
+  async #openFeaturedFeed(url) {
+    const meta = this.featuredFeeds.find((f) => f.url === url);
+    const existing = this.catalog.playlists.find((p) => p.feedUrl === url);
+    if (existing?.trackIds?.length) {
+      this.store.playPlaylist(existing);
+      this.view.setRssStatus(`?????? ???????: ${existing.title}`);
+      this.telegram.haptic("light");
+      return;
+    }
+    await this.#addRssFeed(url, true, meta);
+  }
+
+  async #addRssFeed(url, persist, meta = null) {
+    if (!url) { this.view.setRssStatus("??????? URL RSS-?????.", true); return; }
+    const resolvedMeta = meta || this.featuredFeeds.find((f) => f.url === url);
+    this.view.setRssStatus(`???????? RSS: ${resolvedMeta?.title || url}...`);
     try {
       const feed = await this.rss.fetchFeed(url);
-      const playlist = this.catalog.addRssFeed(feed, this.featuredFeeds.find((f) => f.url === url));
+      const playlist = this.catalog.addRssFeed(feed, resolvedMeta);
       if (persist) this.rss.saveFeed(url);
-      this.view.setRssStatus(`Добавлено: ${feed.title}. Эпизодов: ${feed.episodes?.length ?? 0}`);
+      if (!playlist.trackIds.length) {
+        this.view.setRssStatus(`RSS ????????, ?? ???????????? ?? ???????: ${playlist.title}`, true);
+        this.#render();
+        return;
+      }
+      this.view.setRssStatus(`?????????: ${feed.title}. ????????: ${feed.episodes?.length ?? 0}`);
       this.store.playPlaylist(playlist);
       this.telegram.haptic("light");
     } catch (error) {
-      this.view.setRssStatus(`Ошибка RSS: ${error.message || "не удалось загрузить"}`, true);
+      console.error("RSS load failed", url, error);
+      this.view.setRssStatus(`?????? RSS (${resolvedMeta?.title || "?????"}): ${error.message || "?? ??????? ?????????"}`, true);
     }
   }
 

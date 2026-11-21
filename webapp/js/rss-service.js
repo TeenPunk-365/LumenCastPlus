@@ -24,6 +24,10 @@
   async fetchFeed(url) {
     const endpoint = `${this.baseUrl}/api/rss?url=${encodeURIComponent(url)}`;
     const response = await fetch(endpoint, { headers: { Accept: "application/json" } });
+    const contentType = response.headers.get("content-type") || "";
+    if (!contentType.includes("application/json")) {
+      throw new Error(response.ok ? "invalid_rss_response" : `http_${response.status}`);
+    }
     const data = await response.json();
     if (!response.ok || !data.ok) {
       throw new Error(data.error || "feed_fetch_failed");
