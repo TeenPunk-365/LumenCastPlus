@@ -502,3 +502,61 @@ img { display: block; max-width: 100%; }
 :root[data-theme="dark"] .p-btn { color: #b4bdc7; }
 :root[data-theme="dark"] .p-btn:hover { background: rgba(132,169,199,0.12); color: #f0ebe2; }
 :root[data-theme="dark"] .p-btn.play { color: #18222c; }
+.rss-form {
+  margin-bottom: 14px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: linear-gradient(180deg, var(--surface-alt), var(--surface));
+}
+
+.rss-label {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.rss-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
+.rss-input {
+  width: 100%;
+  min-width: 0;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--surface-soft);
+  color: var(--text);
+  font: inherit;
+}
+
+.rss-input:focus { outline: 2px solid var(--blue-2); outline-offset: 1px; }
+
+.rss-btn {
+  height: 40px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--blue);
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.rss-btn:disabled { opacity: .6; cursor: default; }
+
+.rss-status {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.rss-status.is-error { color: #b35b5b; }

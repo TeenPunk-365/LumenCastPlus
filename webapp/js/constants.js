@@ -1,4 +1,4 @@
-export const TABS = Object.freeze({
+﻿export const TABS = Object.freeze({
   HOME: "home",
   SEARCH: "search",
   LIBRARY: "library",
@@ -17,3 +17,4 @@ export const ITEM_KINDS = Object.freeze({
 });
 
 export const THEME_KEY = "lumencast-theme";
+export const RSS_FEEDS_KEY = "lumencast-rss-feeds";

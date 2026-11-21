@@ -1,4 +1,4 @@
-import { artStyle, escapeHtml, formatTime } from "./utils.js";
+﻿import { artStyle, escapeHtml, formatTime } from "./utils.js";
 
 export class PlayerView {
   constructor(root = document) {
@@ -71,10 +71,27 @@ export class PlayerView {
   setTheme(theme) {
     const dark = theme === "dark";
     if (this.refs.themeBtn) {
-      this.refs.themeBtn.textContent = dark ? "?" : "??";
-      this.refs.themeBtn.title = dark ? "??????? ????" : "?????? ????";
+      this.refs.themeBtn.textContent = dark ? "☀" : "🌙";
+      this.refs.themeBtn.title = dark ? "Светлая тема" : "Тёмная тема";
       this.refs.themeBtn.setAttribute("aria-label", this.refs.themeBtn.title);
     }
+  }
+
+  bindRssForm(handler) {
+    const form = this.root.getElementById("rss-form");
+    const input = this.root.getElementById("rss-input");
+    if (!form || !input) return;
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      handler(input.value.trim());
+    });
+  }
+
+  setRssStatus(message, isError = false) {
+    const el = this.root.getElementById("rss-status");
+    if (!el) return;
+    el.textContent = message;
+    el.classList.toggle("is-error", isError);
   }
 
   bindDelegatedClicks(handlers) {
@@ -124,7 +141,8 @@ export class PlayerView {
     this.refs.catGrid.innerHTML = categories.map((item) => this.categoryCard(item)).join("");
   }
 
-  renderHome({ madeForYou, popular, recent, currentTrackId, playing }) {
+  renderHome({ quickPlaylists, madeForYou, popular, recent, currentTrackId, playing }) {
+    this.refs.quickGrid.innerHTML = quickPlaylists.map((item) => this.quickCard(item)).join("");
     this.refs.madeForYou.innerHTML = madeForYou.map((item) => this.mediaCard(item, "playlist", currentTrackId, playing)).join("");
     this.refs.popularPlaylists.innerHTML = popular.map((item) => this.mediaCard(item, "playlist", currentTrackId, playing)).join("");
     this.refs.recentlyPlayed.innerHTML = recent.map((item) => this.mediaCard(item, item.kind, currentTrackId, playing)).join("");
@@ -138,7 +156,7 @@ export class PlayerView {
     if (!showResults) return;
     this.refs.searchResults.innerHTML = results.length
       ? results.map((track) => this.trackRow(track, currentTrackId)).join("")
-      : `<div class="empty-state">?????? ?? ??????? ?? ??????? "${escapeHtml(query)}"</div>`;
+      : `<div class="empty-state">Ничего не найдено по запросу "${escapeHtml(query)}"</div>`;
   }
 
   renderLibrary(items) {
@@ -151,11 +169,11 @@ export class PlayerView {
     this.refs.playerArt.innerHTML = `<span>${track.cover}</span>`;
     this.#setMarquee(this.refs.playerTitle, track.title);
     this.refs.playerSub.textContent = track.artist;
-    this.refs.playBtn.textContent = playing ? "??" : "?";
+    this.refs.playBtn.textContent = playing ? "❚❚" : "▶";
     this.refs.timeCur.textContent = formatTime(progress);
     this.refs.timeDur.textContent = formatTime(track.duration);
     this.refs.progressFill.style.width = `${track.duration ? (progress / track.duration) * 100 : 0}%`;
-    this.refs.likeBtn.textContent = liked ? "?" : "?";
+    this.refs.likeBtn.textContent = liked ? "♥" : "♡";
     this.refs.likeBtn.classList.toggle("liked", liked);
   }
 
@@ -165,9 +183,8 @@ export class PlayerView {
     container.classList.add("marquee");
 
     const apply = () => {
-      const track = container.querySelector(".marquee__track");
       const first = container.querySelector(".marquee__text");
-      if (!track || !first) return;
+      if (!first) return;
       const overflow = first.scrollWidth > container.clientWidth + 2;
       container.classList.toggle("is-overflowing", overflow);
       if (overflow) {
@@ -203,8 +220,8 @@ export class PlayerView {
     return `
       <div class="media-card ${isPlaying ? "playing" : ""}" data-type="${type}" data-id="${item.id}">
         <div class="media-art ${round}" style="${artStyle(item.color)}">
-          <div class="art-inner">${item.icon || item.cover || "???"}</div>
-          <div class="play-fab">${isPlaying ? "??" : "?"}</div>
+          <div class="art-inner">${item.icon || item.cover || "🎙️"}</div>
+          <div class="play-fab">${isPlaying ? "❚❚" : "▶"}</div>
         </div>
         <div class="title">${escapeHtml(item.title)}</div>
         <div class="sub">${escapeHtml(item.subtitle || item.artist || "")}</div>
@@ -233,8 +250,8 @@ export class PlayerView {
   }
 
   libraryItem(item) {
-    const kindLabel = item.kind === "artist" ? "?????" : "???????";
-    const sub = item.kind === "artist" ? kindLabel : `${kindLabel} ? ${item.subtitle}`;
+    const kindLabel = item.kind === "artist" ? "Автор" : "Подкаст";
+    const sub = item.kind === "artist" ? kindLabel : `${kindLabel} • ${item.subtitle}`;
     return `
       <div class="lib-item" data-type="${item.kind}" data-id="${item.id}">
         <div class="lib-art ${item.round ? "round" : ""}" style="${artStyle(item.color)}">${item.icon}</div>

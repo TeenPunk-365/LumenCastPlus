@@ -4,7 +4,8 @@ Telegram Mini App (Python backend + static frontend) в стиле подкас�
 
 ## Структура
 
-- `main.py` — aiogram бот + aiohttp API/раздача статики
+- `main.py` — точка входа
+- `backend/` — Python backend (config, security, middlewares, bot handlers, web API, app bootstrap)
 - `index.html` — фронтенд (корень, подходит для GitHub Pages)
 - `webapp/styles.css` — стили
 - `webapp/js/` — JS-модули UI
