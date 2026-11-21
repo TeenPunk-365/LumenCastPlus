@@ -22,10 +22,58 @@
   }
 
   async fetchFeed(url) {
-    const backendError = await this.#tryBackend(url);
-    if (backendError?.feed) return backendError.feed;
+    const backend = await this.#tryBackend(url);
+    if (backend?.feed) return backend.feed;
+    const rss2json = await this.#tryRss2Json(url);
+    if (rss2json?.episodes?.length) return rss2json;
     const xml = await this.#fetchXml(url);
     return this.#parseFeed(xml, url);
+  }
+
+  async #tryRss2Json(url) {
+    try {
+      const endpoint = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url)}`;
+      const response = await fetch(endpoint, { headers: { Accept: "application/json" } });
+      if (!response.ok) return null;
+      const data = await response.json();
+      if (data?.status !== "ok" || !data?.feed) return null;
+      return this.#mapRss2Json(data, url);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  #mapRss2Json(data, sourceUrl) {
+    const feed = data.feed || {};
+    const episodes = (data.items || []).map((item, index) => {
+      const enclosure = item.enclosure || {};
+      const audioUrl = enclosure.link || enclosure.url || "";
+      if (!audioUrl || !/^https?:\/\//i.test(audioUrl)) return null;
+      return {
+        id: this.#episodeId(sourceUrl, audioUrl, index),
+        title: item.title || `?????? ${index + 1}`,
+        artist: item.author || feed.author || feed.title || "Podcast",
+        duration: this.#parseDuration(item.itunes_duration || enclosure.duration || 0),
+        audio_url: audioUrl,
+        published_at: this.#normalizeDate(item.pubDate),
+        description: this.#stripHtml(item.description || item.content || ""),
+        cover: item.thumbnail || feed.image || "???",
+        link: item.link || null,
+      };
+    }).filter(Boolean);
+    return {
+      title: feed.title || "Podcast",
+      author: feed.author || feed.title || "Podcast",
+      description: this.#stripHtml(feed.description || ""),
+      cover: feed.image || "???",
+      link: feed.link || sourceUrl || null,
+      language: this.#normalizeLang(feed.language),
+      episodes,
+    };
+  }
+
+  #stripHtml(value) {
+    return String(value || "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
   }
 
   async #tryBackend(url) {
@@ -51,10 +99,11 @@
   async #fetchXml(url) {
     const attempts = [
       () => this.#fetchXmlDirect(url),
-      () => this.#fetchXmlDirect(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`),
       () => this.#fetchAllOriginsGet(url),
+      () => this.#fetchXmlDirect(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`),
       () => this.#fetchXmlDirect(`https://corsproxy.io/?url=${encodeURIComponent(url)}`),
       () => this.#fetchXmlDirect(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`),
+      () => this.#fetchJina(url),
     ];
     let lastError = null;
     for (const attempt of attempts) {
@@ -83,6 +132,17 @@
     const data = await response.json();
     const contents = typeof data?.contents === "string" ? data.contents : "";
     if (contents && /<(rss|feed|rdf:RDF)\b/i.test(contents)) return contents;
+    throw new Error("invalid_rss_response");
+  }
+
+  async #fetchJina(url) {
+    const bare = url.replace(/^https?:\/\//i, "");
+    const endpoint = `https://r.jina.ai/http://${bare}`;
+    const response = await fetch(endpoint, { headers: { Accept: "text/plain, application/xml, */*" } });
+    if (!response.ok) throw new Error(`http_${response.status}`);
+    const text = await response.text();
+    const match = text.match(/<(rss|feed|rdf:RDF)[\s\S]*$/i);
+    if (match && /<(rss|feed|rdf:RDF)/i.test(match[0])) return match[0];
     throw new Error("invalid_rss_response");
   }
 
