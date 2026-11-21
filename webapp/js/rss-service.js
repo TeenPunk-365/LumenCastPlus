@@ -50,23 +50,40 @@
 
   async #fetchXml(url) {
     const attempts = [
-      url,
-      `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-      `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
+      () => this.#fetchXmlDirect(url),
+      () => this.#fetchXmlDirect(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`),
+      () => this.#fetchAllOriginsGet(url),
+      () => this.#fetchXmlDirect(`https://corsproxy.io/?url=${encodeURIComponent(url)}`),
+      () => this.#fetchXmlDirect(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`),
     ];
     let lastError = null;
-    for (const endpoint of attempts) {
+    for (const attempt of attempts) {
       try {
-        const response = await fetch(endpoint, { headers: { Accept: "application/rss+xml, application/xml, text/xml, */*" } });
-        if (!response.ok) { lastError = new Error(`http_${response.status}`); continue; }
-        const text = await response.text();
-        if (text && /<(rss|feed|rdf:RDF)\b/i.test(text)) return text;
-        lastError = new Error("invalid_rss_response");
+        const xml = await attempt();
+        if (xml) return xml;
       } catch (error) {
         lastError = error;
       }
     }
     throw lastError || new Error("feed_fetch_failed");
+  }
+
+  async #fetchXmlDirect(endpoint) {
+    const response = await fetch(endpoint, { headers: { Accept: "application/rss+xml, application/xml, text/xml, application/json, */*" } });
+    if (!response.ok) throw new Error(`http_${response.status}`);
+    const text = await response.text();
+    if (text && /<(rss|feed|rdf:RDF)\b/i.test(text)) return text;
+    throw new Error("invalid_rss_response");
+  }
+
+  async #fetchAllOriginsGet(url) {
+    const endpoint = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+    const response = await fetch(endpoint, { headers: { Accept: "application/json" } });
+    if (!response.ok) throw new Error(`http_${response.status}`);
+    const data = await response.json();
+    const contents = typeof data?.contents === "string" ? data.contents : "";
+    if (contents && /<(rss|feed|rdf:RDF)\b/i.test(contents)) return contents;
+    throw new Error("invalid_rss_response");
   }
 
   #parseFeed(xml, sourceUrl) {
