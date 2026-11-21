@@ -33,6 +33,7 @@ class PodcastFeed:
     description: str
     cover: str
     link: str | None
+    language: str | None
     episodes: list[PodcastEpisode]
 
     def to_dict(self) -> dict[str, Any]:
@@ -79,6 +80,7 @@ class RssPodcastService:
         feed_description = self._text(channel, "description") or self._text(channel, "itunes:summary") or ""
         feed_cover = self._rss_image(channel)
         feed_link = self._text(channel, "link") or source_url or None
+        language = self._normalize_lang(self._text(channel, "language"))
 
         episodes: list[PodcastEpisode] = []
         for index, item in enumerate(channel.findall("item")):
@@ -106,6 +108,7 @@ class RssPodcastService:
             description=feed_description,
             cover=feed_cover,
             link=feed_link,
+            language=language,
             episodes=episodes,
         )
 
@@ -115,6 +118,7 @@ class RssPodcastService:
         subtitle = self._text(feed, "atom:subtitle") or ""
         cover = self._attr(feed, "atom:logo") or self._attr(feed, "atom:icon") or "🎙️"
         link = self._atom_link(feed, "alternate") or source_url or None
+        language = self._normalize_lang(feed.attrib.get("{http://www.w3.org/XML/1998/namespace}lang"))
 
         episodes: list[PodcastEpisode] = []
         for index, entry in enumerate(feed.findall("atom:entry", self._NS)):
@@ -135,7 +139,7 @@ class RssPodcastService:
                 )
             )
 
-        return PodcastFeed(title=title, author=author, description=subtitle, cover=cover, link=link, episodes=episodes)
+        return PodcastFeed(title=title, author=author, description=subtitle, cover=cover, link=link, language=language, episodes=episodes)
 
     @staticmethod
     def _validate_url(url: str) -> None:
@@ -214,6 +218,13 @@ class RssPodcastService:
             return datetime.fromisoformat(normalized).isoformat()
         except Exception:
             return value
+
+    @staticmethod
+    def _normalize_lang(value: str | None) -> str | None:
+        if not value:
+            return None
+        lang = value.strip().lower().replace("_", "-")
+        return lang or None
 
     @staticmethod
     def _parse_duration(value: str | None) -> int:

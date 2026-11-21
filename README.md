@@ -17,3 +17,10 @@ Telegram Mini App (Python backend + static frontend) в стиле подкас�
 3. `python main.py`
 
 Mini App: `/webapp/` (локально `http://localhost:8080/webapp/`). Для GitHub Pages используется корневой `index.html`.
+
+## RSS
+
+- При старте приложение загружает подборку бесплатных RSS-подкастов, преимущественно на русском: Радио-Т, Завтракаст, После пары, В голове у музыканта, Соль земли (+ Planet Money как англ. пример).
+- Во вкладке «Поиск» можно выбрать подкаст из подборки или добавить свой RSS/Atom URL; язык показывается в карточке/описании подкаста.
+- Backend endpoint: `GET /api/rss?url=<feed_url>` — парсит RSS/Atom, возвращает эпизоды с `audio_url` и `language`.
+- Эпизоды воспроизводятся через HTML5 Audio; добавленные пользователем RSS-ленты сохраняются в `localStorage`.

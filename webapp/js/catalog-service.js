@@ -1,14 +1,13 @@
 ﻿import { FILTERS, ITEM_KINDS } from "./constants.js";
 
 export class CatalogService {
-  constructor({ tracks, playlists, artists, categories }) {
+  constructor({ tracks = [], playlists = [], artists = [], categories = [] }) {
     this.tracks = [...tracks];
     this.playlists = [...playlists];
     this.artists = [...artists];
     this.categories = [...categories];
     this.trackById = new Map(this.tracks.map((track) => [track.id, track]));
     this.playlistById = new Map(this.playlists.map((playlist) => [playlist.id, playlist]));
-    this.rssPlaylists = [];
   }
 
   getTrack(id) { return this.trackById.get(id) ?? null; }
@@ -22,16 +21,11 @@ export class CatalogService {
   searchTracks(query) {
     const normalized = query.trim().toLowerCase();
     if (!normalized) return [];
-    return this.tracks.filter((track) =>
-      `${track.title} ${track.artist}`.toLowerCase().includes(normalized),
-    );
+    return this.tracks.filter((track) => `${track.title} ${track.artist}`.toLowerCase().includes(normalized));
   }
 
   getRecentItems(ids) {
-    return ids
-      .map((id) => this.getPlaylist(id) ?? this.getTrack(id))
-      .filter(Boolean)
-      .map((item) => this.#withKind(item));
+    return ids.map((id) => this.getPlaylist(id) ?? this.getTrack(id)).filter(Boolean).map((item) => this.#withKind(item));
   }
 
   getLibraryItems(filter) {
@@ -46,15 +40,16 @@ export class CatalogService {
     return {
       quickPlaylists: this.playlists.slice(0, 6),
       madeForYou: this.playlists.slice(0, 4),
-      popular: [...this.playlists.slice(2), ...this.playlists.slice(0, 2)].slice(0, 6),
+      popular: this.playlists.slice(2, 8),
       recent: this.getRecentItems(recentIds),
     };
   }
 
-  addRssFeed(feed) {
+  addRssFeed(feed, meta = null) {
     const feedId = `rss-${this.#hash(feed.link || feed.title || feed.author || "feed")}`;
     const existing = this.getPlaylist(feedId);
-    const palette = this.#palette(feed.title);
+    const palette = meta?.color || this.#palette(feed.title);
+    const icon = meta?.icon || this.#cover(feed.cover);
 
     const episodes = (feed.episodes || []).filter((ep) => ep?.audio_url).map((ep, idx) => {
       const id = ep.id || `${feedId}-ep-${idx}`;
@@ -65,7 +60,7 @@ export class CatalogService {
         artist: ep.artist || feed.author || feed.title || "Podcast",
         duration: Number(ep.duration) || track.duration || 0,
         color: palette,
-        cover: this.#cover(ep.cover),
+        cover: icon,
         audioUrl: ep.audio_url,
         description: ep.description || "",
         kind: ITEM_KINDS.TRACK,
@@ -76,22 +71,25 @@ export class CatalogService {
       return id;
     });
 
+    const language = meta?.language || feed.language || null;
     const playlist = existing || { id: feedId };
     Object.assign(playlist, {
       id: feedId,
-      title: feed.title || "RSS Podcast",
-      subtitle: feed.author || "RSS Feed",
+      title: meta?.title || feed.title || "RSS Podcast",
+      subtitle: meta?.author || feed.author || "RSS Feed",
+      description: meta?.description || feed.description || "",
       color: palette,
-      icon: this.#cover(feed.cover),
+      icon,
       trackIds: episodes,
       kind: ITEM_KINDS.PLAYLIST,
       source: "rss",
+      feedUrl: meta?.url || feed.link || "",
+      language,
     });
 
     if (!existing) {
       this.playlists.unshift(playlist);
       this.playlistById.set(playlist.id, playlist);
-      this.rssPlaylists.unshift(playlist);
     }
     return playlist;
   }
@@ -104,9 +102,5 @@ export class CatalogService {
     for (let i = 0; i < s.length; i += 1) h = (h * 31 + s.charCodeAt(i)) >>> 0;
     return palettes[h % palettes.length];
   }
-  #hash(value) {
-    let h = 0; const s = String(value || "");
-    for (let i = 0; i < s.length; i += 1) h = (h * 31 + s.charCodeAt(i)) >>> 0;
-    return h.toString(36);
-  }
+  #hash(value) { let h = 0; const s = String(value || ""); for (let i = 0; i < s.length; i += 1) h = (h * 31 + s.charCodeAt(i)) >>> 0; return h.toString(36); }
 }

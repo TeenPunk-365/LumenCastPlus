@@ -2,7 +2,7 @@
 import { EventBus } from "./event-bus.js";
 
 export class PlayerStore extends EventBus {
-  constructor(tracks) {
+  constructor(tracks = []) {
     super();
     this.trackMeta = new Map(tracks.map((track) => [track.id, { duration: track.duration || 0 }]));
     this.state = {
@@ -14,7 +14,7 @@ export class PlayerStore extends EventBus {
       playing: false,
       progress: 0,
       liked: new Set(),
-      recent: ["p1", "p2", "t3", "p4"],
+      recent: [],
     };
   }
 
@@ -53,34 +53,24 @@ export class PlayerStore extends EventBus {
   }
 
   togglePlay() { this.#setState({ playing: !this.state.playing }); }
-
-  next() {
-    if (!this.state.queue.length) return;
-    this.#setState({ currentIndex: (this.state.currentIndex + 1) % this.state.queue.length, progress: 0, playing: true });
-  }
-
+  next() { if (this.state.queue.length) this.#setState({ currentIndex: (this.state.currentIndex + 1) % this.state.queue.length, progress: 0, playing: true }); }
   prev() {
     if (this.state.progress > 3) { this.#setState({ progress: 0 }); return; }
-    if (!this.state.queue.length) return;
-    this.#setState({ currentIndex: (this.state.currentIndex - 1 + this.state.queue.length) % this.state.queue.length, progress: 0, playing: true });
+    if (this.state.queue.length) this.#setState({ currentIndex: (this.state.currentIndex - 1 + this.state.queue.length) % this.state.queue.length, progress: 0, playing: true });
   }
-
   seek(progress) { this.#setState({ progress: Math.max(0, Math.floor(progress)) }); }
-
   setProgress(progress, emit = true) {
     const next = Math.max(0, Math.floor(progress));
     if (this.state.progress === next) return;
     this.state = { ...this.state, progress: next };
     if (emit) this.emit("change", this.state);
   }
-
   tick(duration) {
     if (!this.state.playing) return;
     const nextProgress = this.state.progress + 1;
     if (duration > 0 && nextProgress >= duration) { this.next(); return; }
     this.setProgress(nextProgress);
   }
-
   toggleLike(trackId) {
     const liked = new Set(this.state.liked);
     if (liked.has(trackId)) liked.delete(trackId); else liked.add(trackId);

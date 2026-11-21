@@ -2,12 +2,13 @@
 import { greetingByHour } from "./utils.js";
 
 export class PlayerController {
-  constructor({ store, catalog, view, telegram, rss, timer = window, storage = window.localStorage }) {
+  constructor({ store, catalog, view, telegram, rss, featuredFeeds = [], timer = window, storage = window.localStorage }) {
     this.store = store;
     this.catalog = catalog;
     this.view = view;
     this.telegram = telegram;
     this.rss = rss;
+    this.featuredFeeds = featuredFeeds;
     this.timer = timer;
     this.storage = storage;
     this.intervalId = null;
@@ -23,7 +24,7 @@ export class PlayerController {
     this.#bindEvents();
     this.#bindAudio();
     this.store.on("change", () => this.#render());
-    this.#restoreRssFeeds();
+    this.#bootstrapFeeds();
     this.#render();
     this.#startTicker();
   }
@@ -44,12 +45,13 @@ export class PlayerController {
       onTrack: (id) => this.#playTrack(id),
       onArtist: () => this.#setTab(TABS.SEARCH),
       onCategory: (name) => this.#selectCategory(name),
+      onFeaturedFeed: (url) => this.#addRssFeed(url, true),
     });
     this.view.bindTopbar({
       onNotify: () => this.#toggleTheme(),
       onHistory: () => this.#setTab(TABS.LIBRARY),
     });
-    this.view.bindRssForm((url) => this.#addRssFeed(url));
+    this.view.bindRssForm((url) => this.#addRssFeed(url, true));
   }
 
   #bindAudio() {
@@ -72,21 +74,37 @@ export class PlayerController {
     });
   }
 
-  async #restoreRssFeeds() {
-    const feeds = this.rss?.getSavedFeeds?.() ?? [];
-    for (const url of feeds) {
-      try { this.catalog.addRssFeed(await this.rss.fetchFeed(url)); } catch (_) {}
+  async #bootstrapFeeds() {
+    this.view.setRssStatus("Загружаю подборку подкастов...");
+    const saved = this.rss?.getSavedFeeds?.() ?? [];
+    const urls = [...new Set([...this.featuredFeeds.map((f) => f.url), ...saved])];
+    let loaded = 0;
+    for (const url of urls) {
+      const ok = await this.#loadFeed(url, false);
+      if (ok) loaded += 1;
     }
-    if (feeds.length) this.#render();
+    this.view.setRssStatus(loaded ? `Доступно RSS-лент: ${loaded}. Можно добавить свою.` : "Не удалось загрузить RSS. Добавьте свою ссылку.", !loaded);
+    this.#render();
   }
 
-  async #addRssFeed(url) {
+  async #loadFeed(url, persist) {
+    try {
+      const feed = await this.rss.fetchFeed(url);
+      this.catalog.addRssFeed(feed, this.featuredFeeds.find((f) => f.url === url));
+      if (persist) this.rss.saveFeed(url);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  async #addRssFeed(url, persist) {
     if (!url) { this.view.setRssStatus("Укажите URL RSS-ленты.", true); return; }
     this.view.setRssStatus("Загружаю RSS-ленту...");
     try {
       const feed = await this.rss.fetchFeed(url);
-      const playlist = this.catalog.addRssFeed(feed);
-      this.rss.saveFeed(url);
+      const playlist = this.catalog.addRssFeed(feed, this.featuredFeeds.find((f) => f.url === url));
+      if (persist) this.rss.saveFeed(url);
       this.view.setRssStatus(`Добавлено: ${feed.title}. Эпизодов: ${feed.episodes?.length ?? 0}`);
       this.store.playPlaylist(playlist);
       this.telegram.haptic("light");
@@ -107,7 +125,7 @@ export class PlayerController {
     const home = this.catalog.getHomeSections(state.recent);
     this.#syncAudio(currentTrack, state.playing);
 
-    this.view.renderShell({ tab: state.tab, filter: state.filter, playlists: this.catalog.playlists, categories: this.catalog.categories });
+    this.view.renderShell({ tab: state.tab, filter: state.filter, featuredFeeds: this.featuredFeeds });
     this.view.renderHome({ ...home, currentTrackId: currentTrack?.id ?? null, playing: state.playing });
     this.view.renderSearch({ query: state.searchQuery, results: this.catalog.searchTracks(state.searchQuery), currentTrackId: currentTrack?.id ?? null });
     this.view.renderLibrary(this.catalog.getLibraryItems(state.filter));
@@ -135,19 +153,8 @@ export class PlayerController {
     const preferred = this.telegram.getColorScheme();
     this.#setTheme(saved || preferred || "light", false);
   }
-
-  #toggleTheme() {
-    this.#setTheme(this.#currentTheme() === "dark" ? "light" : "dark", true);
-    this.telegram.haptic("light");
-  }
-
-  #setTheme(theme, persist) {
-    document.documentElement.dataset.theme = theme;
-    this.view.setTheme(theme);
-    this.telegram.syncTheme(theme);
-    if (persist) this.#writeTheme(theme);
-  }
-
+  #toggleTheme() { this.#setTheme(this.#currentTheme() === "dark" ? "light" : "dark", true); this.telegram.haptic("light"); }
+  #setTheme(theme, persist) { document.documentElement.dataset.theme = theme; this.view.setTheme(theme); this.telegram.syncTheme(theme); if (persist) this.#writeTheme(theme); }
   #currentTheme() { return document.documentElement.dataset.theme === "dark" ? "dark" : "light"; }
   #readTheme() { try { return this.storage.getItem(THEME_KEY); } catch (_) { return null; } }
   #writeTheme(theme) { try { this.storage.setItem(THEME_KEY, theme); } catch (_) {} }
@@ -160,13 +167,7 @@ export class PlayerController {
   #togglePlay() { this.store.togglePlay(); this.telegram.haptic("light"); }
   #next() { this.store.next(); this.telegram.haptic("light"); }
   #prev() { this.store.prev(); this.telegram.haptic("light"); }
-
-  #toggleLike() {
-    const trackId = this.store.currentTrackId();
-    if (!trackId) return;
-    this.store.toggleLike(trackId);
-    this.telegram.haptic("light");
-  }
+  #toggleLike() { const id = this.store.currentTrackId(); if (id) { this.store.toggleLike(id); this.telegram.haptic("light"); } }
 
   #seek(ratio) {
     const track = this.catalog.getTrack(this.store.currentTrackId());
@@ -183,10 +184,5 @@ export class PlayerController {
       if (track && !track.audioUrl) this.store.tick(track.duration);
     }, 1000);
   }
-
-  #stopTicker() {
-    if (!this.intervalId) return;
-    this.timer.clearInterval(this.intervalId);
-    this.intervalId = null;
-  }
+  #stopTicker() { if (this.intervalId) { this.timer.clearInterval(this.intervalId); this.intervalId = null; } }
 }
